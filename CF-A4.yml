@@ -1,5 +1,12 @@
-# CMU 17-647 — Assignment A4 (extends A3): same VPC/EKS/LabRole pattern as CF-A3-cmu.yml, plus DocumentDB (A4).
-# EKS cluster + node group use LabRoleARN exactly like A3 (IAM | Roles | LabRole | copy ARN).
+# CMU 17-647 — Assignment A4 (extends A3) + DocumentDB.
+#
+# EKS IMPORTANT — Why CF-A3-cmu.yml "LabRole" for RoleArn fails with 403 "Cross-account pass role is not allowed":
+#   LabRole (voclabs / console login role) is for YOUR user sessions. EKS CreateCluster requires a *cluster IAM role*
+#   that trusts "eks.amazonaws.com" (AmazonEKSClusterPolicy). The node group requires a *node IAM role* that trusts
+#   "ec2.amazonaws.com" (worker + CNI + ECR policies). LabRole is neither — the EKS API rejects it.
+#   Use ClusterServiceRoleArn + NodeInstanceRoleArn below (create in IAM via EKS console flows, or ARNs from your instructor).
+# Ref: https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html
+#      https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html
 AWSTemplateFormatVersion: 2010-09-09
 Parameters:
 
@@ -9,9 +16,21 @@ Parameters:
     NoEcho: false
     Default: bookstore-dev
 
-  LabRoleARN:
+  ClusterServiceRoleArn:
     Type: String
-    Description: "Enter the ARN for LabRole you find here: IAM | Roles | click on LabRole | copy ARN"
+    MinLength: 20
+    Description: >
+      EKS *cluster* IAM role ARN (NOT LabRole). Trust: eks.amazonaws.com + AmazonEKSClusterPolicy.
+      Paste the full ARN from IAM (Roles → role → copy ARN). Typical form: arn:aws:iam::ACCOUNT_ID:role/...
+      No leading/trailing spaces. GovCloud: arn:aws-us-gov:iam::...
+
+  NodeInstanceRoleArn:
+    Type: String
+    MinLength: 20
+    Description: >
+      EKS *node* IAM role ARN (NOT LabRole). Trust: ec2.amazonaws.com + worker/CNI/ECR managed policies.
+      Paste the full ARN from IAM (Roles → role → copy ARN). Typical form: arn:aws:iam::ACCOUNT_ID:role/...
+      No leading/trailing spaces. If validation failed before, your ARN may use a path — pasting the exact copy from IAM is required.
 
 #  AccountID:
 #    Type: String
@@ -338,7 +357,7 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub "${VpcName}-BookstoreEKSCluster"
-      RoleArn: !Ref LabRoleARN
+      RoleArn: !Ref ClusterServiceRoleArn
       ResourcesVpcConfig:
         EndpointPrivateAccess: true
         EndpointPublicAccess: true
@@ -383,7 +402,7 @@ Resources:
     Properties:
       ClusterName: !Ref BookstoreEKSCluster
       NodegroupName: !Sub "${VpcName}-EksNodeGroup"
-      NodeRole: !Ref LabRoleARN
+      NodeRole: !Ref NodeInstanceRoleArn
       Subnets:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
@@ -597,6 +616,14 @@ Outputs:
   KubectlConfigureHint:
     Description: Learner Lab cannot create a bastion IAM role; run kubectl from CloudShell or local AWS CLI.
     Value: !Sub "aws eks update-kubeconfig --region ${AWS::Region} --name ${VpcName}-BookstoreEKSCluster && kubectl get nodes"
+
+  ClusterServiceRoleArnUsed:
+    Description: EKS control plane RoleArn (must trust eks.amazonaws.com). Echo of ClusterServiceRoleArn parameter.
+    Value: !Ref ClusterServiceRoleArn
+
+  NodeInstanceRoleArnUsed:
+    Description: Managed node group NodeRole (must trust ec2.amazonaws.com). Echo of NodeInstanceRoleArn parameter.
+    Value: !Ref NodeInstanceRoleArn
 
   AuroraClusterEndpoint:
     Description: Aurora MySQL writer hostname — set RDS_ENDPOINT / DB_HOST in k8s deploy.env (port 3306).
