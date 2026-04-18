@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crm-service
+  namespace: bookstore-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crm-service
+  template:
+    metadata:
+      labels:
+        app: crm-service
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: crm-service
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: crm-service
+          image: YOUR_REGISTRY/crm-service:latest
+          imagePullPolicy: Always
+          env:
+            - name: KAFKA_BROKERS
+              value: YOUR_KAFKA_BROKERS
+            - name: ANDREW_ID
+              value: your_andrew_id
+            - name: SMTP_HOST
+              value: YOUR_SMTP_HOST
+            - name: SMTP_PORT
+              value: "YOUR_SMTP_PORT"
+            - name: SMTP_STARTTLS
+              value: "YOUR_SMTP_STARTTLS"
+            - name: SMTP_USERNAME
+              value: "YOUR_SMTP_USERNAME"
+            - name: SMTP_PASSWORD
+              value: "YOUR_SMTP_PASSWORD"
+            - name: SMTP_SENDER_EMAIL
+              value: "YOUR_SMTP_SENDER_EMAIL"

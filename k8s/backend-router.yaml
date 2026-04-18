@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-router-nginx
+  namespace: bookstore-ns
+data:
+  default.conf: |
+    server {
+      listen 3000;
+      server_name _;
+
+      location ~ ^/customers(/|$) {
+        proxy_pass http://customer-service:3000;
+      }
+
+      location / {
+        return 404;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-router
+  namespace: bookstore-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-router
+  template:
+    metadata:
+      labels:
+        app: backend-router
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: backend-router
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: backend-router
+          image: nginx:alpine
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: backend-router-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-router
+  namespace: bookstore-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: backend-router
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000

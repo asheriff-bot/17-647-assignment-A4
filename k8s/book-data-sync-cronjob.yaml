@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: book-data-sync
+  namespace: bookstore-ns
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: book-data-sync
+              image: YOUR_REGISTRY/book-data-sync:latest
+              imagePullPolicy: Always
+              env:
+                - name: DB_HOST
+                  value: YOUR_RDS_ENDPOINT
+                - name: DB_USER
+                  value: YOUR_DB_USER
+                - name: DB_PASSWORD
+                  value: YOUR_DB_PASSWORD
+                - name: DB_NAME
+                  value: books_db
+                - name: MONGO_URI
+                  value: YOUR_MONGO_URI
+                - name: MONGO_DB_NAME
+                  value: books
+                - name: ANDREW_ID
+                  value: your_andrew_id

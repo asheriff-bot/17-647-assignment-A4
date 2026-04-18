@@ -1,0 +1,4 @@
+flask>=2.0.0,<4
+pymysql>=1.0.0,<2
+cryptography>=42,<44
+kafka-python>=2.0.0,<3

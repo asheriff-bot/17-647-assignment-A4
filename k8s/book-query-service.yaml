@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: book-query
+  namespace: bookstore-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: book-query
+  template:
+    metadata:
+      labels:
+        app: book-query
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: book-query
+                topologyKey: kubernetes.io/hostname
+      volumes:
+        - name: circuit-state
+          emptyDir: {}
+      containers:
+        - name: book-query
+          image: YOUR_REGISTRY/book-query:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: circuit-state
+              mountPath: /circuit
+          env:
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+            - name: MONGO_URI
+              value: YOUR_MONGO_URI
+            - name: MONGO_DB_NAME
+              value: books
+            - name: ANDREW_ID
+              value: your_andrew_id
+            - name: RECOMMENDATION_SERVICE_URL
+              value: YOUR_RECOMMENDATION_SERVICE_URL
+            - name: RECOMMENDATION_PATH_TEMPLATE
+              value: /recommended-titles/isbn/{isbn}
+            - name: RELATED_BOOKS_TIMEOUT_SECONDS
+              value: "3"
+            - name: RELATED_BOOKS_CIRCUIT_OPEN_SECONDS
+              value: "60"
+            - name: CIRCUIT_STATE_FILE
+              value: /circuit/circuit_state.json
+            - name: PORT
+              value: "3000"
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: book-query
+  namespace: bookstore-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: book-query
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
