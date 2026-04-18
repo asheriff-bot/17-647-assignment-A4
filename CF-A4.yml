@@ -1,13 +1,18 @@
 # CMU 17-647 — Assignment A4 (extends A3) + DocumentDB.
 #
-# EKS IMPORTANT — Why CF-A3-cmu.yml "LabRole" for RoleArn fails with 403 "Cross-account pass role is not allowed":
-#   LabRole (voclabs / console login role) is for YOUR user sessions. EKS CreateCluster requires a *cluster IAM role*
-#   that trusts "eks.amazonaws.com" (AmazonEKSClusterPolicy). The node group requires a *node IAM role* that trusts
-#   "ec2.amazonaws.com" (worker + CNI + ECR policies). LabRole is neither — the EKS API rejects it.
-#   Use ClusterServiceRoleArn + NodeInstanceRoleArn below (create in IAM via EKS console flows, or ARNs from your instructor).
-# Ref: https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html
-#      https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html
+# EKS 403 "Cross-account pass role is not allowed" — common causes:
+#   (1) Cluster/node IAM role ARN was for a *different* AWS account than this stack. This template builds ARNs only for
+#       the *current* account (AWS::AccountId) + the role path you enter — do not use another account's role.
+#   (2) LabRole / login role used as cluster role — INVALID. Cluster role must trust eks.amazonaws.com (AmazonEKSClusterPolicy).
+#   (3) Your IAM user/role lacks iam:PassRole on those IAM roles for service eks.amazonaws.com / EC2 for nodes — ask instructor.
+# Cluster role: https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html
+# Node role:     https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html
+#
+# Common mistake: putting RDS DB username (e.g. admin123) into ClusterServiceRoleName — that creates
+# arn:...:role/admin123 and fails with iam:PassRole. Use ONLY the long Lab IAM role *name* after role/, e.g.
+# c210544a5342076l14731743t1w471112-LabEksClusterRole-Ot6U1s0S3cS0 (from IAM → Roles → copy ARN → strip prefix).
 AWSTemplateFormatVersion: 2010-09-09
+
 Parameters:
 
   VpcName:
@@ -16,21 +21,18 @@ Parameters:
     NoEcho: false
     Default: bookstore-dev
 
-  ClusterServiceRoleArn:
+  ClusterServiceRoleName:
     Type: String
-    MinLength: 20
+    MinLength: 12
     Description: >
-      EKS *cluster* IAM role ARN (NOT LabRole). Trust: eks.amazonaws.com + AmazonEKSClusterPolicy.
-      Paste the full ARN from IAM (Roles → role → copy ARN). Typical form: arn:aws:iam::ACCOUNT_ID:role/...
-      No leading/trailing spaces. GovCloud: arn:aws-us-gov:iam::...
+      IAM role name ONLY — the part AFTER role/ in the ARN (long Lab name like ...-LabEksClusterRole-...).
+      NEVER use your database username (e.g. admin123) or DB password here. IAM → Roles → LabEksClusterRole → Copy ARN.
 
-  NodeInstanceRoleArn:
+  NodeInstanceRoleName:
     Type: String
-    MinLength: 20
+    MinLength: 12
     Description: >
-      EKS *node* IAM role ARN (NOT LabRole). Trust: ec2.amazonaws.com + worker/CNI/ECR managed policies.
-      Paste the full ARN from IAM (Roles → role → copy ARN). Typical form: arn:aws:iam::ACCOUNT_ID:role/...
-      No leading/trailing spaces. If validation failed before, your ARN may use a path — pasting the exact copy from IAM is required.
+      IAM node role name ONLY — part AFTER role/ (e.g. ...-LabEksNodeRole-...). NOT your DB credentials. IAM → LabEksNodeRole → Copy ARN.
 
 #  AccountID:
 #    Type: String
@@ -88,6 +90,18 @@ Parameters:
     Type: String
     Default: db.t3.medium
     Description: Instance class for each of the two DocumentDB instances (primary + replica).
+
+Rules:
+  ClusterRoleIsNotDatabaseUsername:
+    Assertions:
+      - AssertDescription: >
+          ClusterServiceRoleName must be the IAM role suffix for LabEksClusterRole (long name from IAM), NOT your
+          RDS/DB username such as admin123. IAM → Roles → open LabEksClusterRole → copy ARN → use only the part after role/
+        Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - !Ref ClusterServiceRoleName
+                - admin123
 
 #Metadata:
 #  AWS::CloudFormation::Interface:
@@ -357,7 +371,7 @@ Resources:
     Type: AWS::EKS::Cluster
     Properties:
       Name: !Sub "${VpcName}-BookstoreEKSCluster"
-      RoleArn: !Ref ClusterServiceRoleArn
+      RoleArn: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ClusterServiceRoleName}'
       ResourcesVpcConfig:
         EndpointPrivateAccess: true
         EndpointPublicAccess: true
@@ -402,7 +416,7 @@ Resources:
     Properties:
       ClusterName: !Ref BookstoreEKSCluster
       NodegroupName: !Sub "${VpcName}-EksNodeGroup"
-      NodeRole: !Ref NodeInstanceRoleArn
+      NodeRole: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${NodeInstanceRoleName}'
       Subnets:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
@@ -617,13 +631,13 @@ Outputs:
     Description: Learner Lab cannot create a bastion IAM role; run kubectl from CloudShell or local AWS CLI.
     Value: !Sub "aws eks update-kubeconfig --region ${AWS::Region} --name ${VpcName}-BookstoreEKSCluster && kubectl get nodes"
 
-  ClusterServiceRoleArnUsed:
-    Description: EKS control plane RoleArn (must trust eks.amazonaws.com). Echo of ClusterServiceRoleArn parameter.
-    Value: !Ref ClusterServiceRoleArn
+  EksClusterIamRoleArnResolved:
+    Description: Cluster RoleArn passed to EKS (this account only). Must trust eks.amazonaws.com.
+    Value: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ClusterServiceRoleName}'
 
-  NodeInstanceRoleArnUsed:
-    Description: Managed node group NodeRole (must trust ec2.amazonaws.com). Echo of NodeInstanceRoleArn parameter.
-    Value: !Ref NodeInstanceRoleArn
+  EksNodeIamRoleArnResolved:
+    Description: Node RoleArn passed to the node group (this account only). Must trust ec2.amazonaws.com.
+    Value: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${NodeInstanceRoleName}'
 
   AuroraClusterEndpoint:
     Description: Aurora MySQL writer hostname — set RDS_ENDPOINT / DB_HOST in k8s deploy.env (port 3306).
