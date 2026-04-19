@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import pymongo
+from pymongo.errors import OperationFailure
 import requests
 from flask import Flask, Response, has_request_context, jsonify, request
 
@@ -347,21 +348,33 @@ def list_or_search_books():
             coll = get_mongo_collection()
         except Exception as e:
             return jsonify({"error": str(e)}), 500
-        rx = re.compile(re.escape(kw), re.IGNORECASE)
-        flt = {
-            "$or": [
-                {"title": rx},
-                {"author": rx},
-                {"Author": rx},
-                {"description": rx},
-                {"genre": rx},
-                {"summary": rx},
-            ]
-        }
-        try:
-            docs = list(coll.find(flt))
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+        use_text = os.environ.get("MONGO_KEYWORD_TEXT_SEARCH", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        docs: list = []
+        if use_text:
+            try:
+                docs = list(coll.find({"$text": {"$search": kw}}))
+            except OperationFailure:
+                docs = []
+        if not docs:
+            rx = re.compile(re.escape(kw), re.IGNORECASE)
+            flt = {
+                "$or": [
+                    {"title": rx},
+                    {"author": rx},
+                    {"Author": rx},
+                    {"description": rx},
+                    {"genre": rx},
+                    {"summary": rx},
+                ]
+            }
+            try:
+                docs = list(coll.find(flt))
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
         rows = [mongo_doc_to_row(d) for d in docs]
         out = [row_to_book_json(r, True) for r in rows]
         if not out:

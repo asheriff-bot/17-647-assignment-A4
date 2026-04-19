@@ -69,6 +69,7 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB_NAME: books
+      MONGO_COLLECTION: books_asheriff
       ANDREW_ID: your_andrew_id
       PORT: "3000"
       # CMU course engine (Canvas): testing http://52.73.13.84 | Gradescope http://100.51.187.149
@@ -96,6 +97,7 @@ services:
       DB_NAME: books_db
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB_NAME: books
+      MONGO_COLLECTION: books_asheriff
       ANDREW_ID: your_andrew_id
     depends_on:
       db:
