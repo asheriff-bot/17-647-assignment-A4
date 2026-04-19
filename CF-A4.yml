@@ -582,5 +582,5 @@ Outputs:
   MongoAtlasCollectionName:
     Description: >-
       Atlas collection for book docs — set MONGO_COLLECTION in k8s deploy.env. Create a text index on this collection
-      for GET /books?keyword= (see scripts/atlas_text_index.mongosh.js). Allow Atlas Network Access for your EKS nodes’ egress IPs.
+      for GET /books?keyword= (see scripts/atlas_text_index.py). Allow Atlas Network Access for your EKS nodes’ egress IPs.
     Value: !Ref MongoCollectionName
