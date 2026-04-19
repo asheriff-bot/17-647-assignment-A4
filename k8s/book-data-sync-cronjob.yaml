@@ -30,6 +30,8 @@ spec:
                 - name: MONGO_URI
                   value: YOUR_MONGO_URI
                 - name: MONGO_DB_NAME
-                  value: books
+                  value: YOUR_MONGO_DB_NAME
+                - name: MONGO_COLLECTION
+                  value: YOUR_MONGO_COLLECTION
                 - name: ANDREW_ID
                   value: your_andrew_id

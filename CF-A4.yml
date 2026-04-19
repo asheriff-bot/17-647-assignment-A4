@@ -1,4 +1,4 @@
-# CMU 17-647 — Assignment A4 (extends A3) + DocumentDB.
+# CMU 17-647 — Assignment A4 (extends A3) + MongoDB Atlas for reads/sync (no AWS DocumentDB in this stack).
 #
 # EKS 403 "Cross-account pass role is not allowed" — common causes:
 #   (1) Cluster/node IAM role ARN was for a *different* AWS account than this stack. This template builds ARNs only for
@@ -80,16 +80,17 @@ Parameters:
     Default: 192.168.192.0/18
     Description: CidrBlock for private subnet 02 within the VPC
 
-  # A4 DocumentDB (MongoDB-compatible API for book-query + book-data-sync)
-  DocDBEngineVersion:
+  # A4: MongoDB Atlas is hosted outside AWS. Create cluster + DB user in Atlas; allow network access from EKS egress
+  # (Atlas → Network Access → IP Access List). Set MONGO_URI and MONGO_COLLECTION in k8s/deploy.env (never commit secrets).
+  MongoDatabaseName:
     Type: String
-    Default: "5.0.0"
-    Description: Amazon DocumentDB engine version (see regional availability in AWS console).
+    Default: books
+    Description: Atlas database name (path in MONGO_URI) for book-query and book-data-sync.
 
-  DocDBInstanceClass:
+  MongoCollectionName:
     Type: String
-    Default: db.t3.medium
-    Description: Instance class for each of the two DocumentDB instances (primary + replica).
+    Default: books_asheriff
+    Description: Collection name for book documents (maps to MONGO_COLLECTION in Kubernetes).
 
 Rules:
   ClusterRoleIsNotDatabaseUsername:
@@ -499,81 +500,6 @@ Resources:
       DBSubnetGroupName: !Ref DBSubnetGroup
       PubliclyAccessible: false
 
-  # ---------------------------------------------------------------------------
-  # A4: Amazon DocumentDB cluster (engine docdb) — two instances for HA
-  # Same private DB subnets as Aurora; security group opens 27017 to EKS worker traffic.
-  # Reference: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-docdb-dbcluster.html
-  # ---------------------------------------------------------------------------
-  DocDBSubnetGroup:
-    Type: AWS::DocDB::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: !Sub "DocumentDB subnets for ${VpcName} (${AWS::StackName})"
-      SubnetIds:
-        - !Ref DBSubnet1
-        - !Ref DBSubnet2
-      Tags:
-        - Key: Name
-          Value: !Sub "${VpcName}-DocDBSubnetGroup"
-
-  DocDBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub "${VpcName}-DocDBSecurityGroup"
-      GroupDescription: DocumentDB TCP 27017 from EKS (book-query, book-data-sync CronJob)
-      VpcId: !Ref VpcBookstore
-      Tags:
-        - Key: Name
-          Value: !Sub "${VpcName}-DocDBSecurityGroup"
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 27017
-          ToPort: 27017
-          SourceSecurityGroupId: !GetAtt BookstoreEKSCluster.ClusterSecurityGroupId
-        - IpProtocol: tcp
-          FromPort: 27017
-          ToPort: 27017
-          SourceSecurityGroupId: !Ref EksSecurityGroup
-      SecurityGroupEgress:
-        - Description: Allow all outbound traffic
-          IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
-
-  DocumentDBCluster:
-    Type: AWS::DocDB::DBCluster
-    DeletionPolicy: Snapshot
-    UpdateReplacePolicy: Snapshot
-    Properties:
-      DBClusterIdentifier: !Sub "${VpcName}-docdb"
-      DBSubnetGroupName: !Ref DocDBSubnetGroup
-      EngineVersion: !Ref DocDBEngineVersion
-      MasterUsername: !Ref DBUsername
-      MasterUserPassword: !Ref DBPassword
-      Port: 27017
-      StorageEncrypted: true
-      BackupRetentionPeriod: 1
-      PreferredBackupWindow: '02:00-03:00'
-      PreferredMaintenanceWindow: 'mon:04:00-mon:05:00'
-      VpcSecurityGroupIds:
-        - !Ref DocDBSecurityGroup
-      Tags:
-        - Key: Name
-          Value: !Sub "${VpcName}-DocumentDBCluster"
-
-  DocumentDBInstancePrimary:
-    Type: AWS::DocDB::DBInstance
-    Properties:
-      DBClusterIdentifier: !Ref DocumentDBCluster
-      DBInstanceClass: !Ref DocDBInstanceClass
-      DBInstanceIdentifier: !Sub "${VpcName}-docdb-1"
-
-  DocumentDBInstanceSecondary:
-    Type: AWS::DocDB::DBInstance
-    Properties:
-      DBClusterIdentifier: !Ref DocumentDBCluster
-      DBInstanceClass: !Ref DocDBInstanceClass
-      DBInstanceIdentifier: !Sub "${VpcName}-docdb-2"
-
-
 #  PrivateRouteTable01:
 #    Type: AWS::EC2::RouteTable
 #    Properties:
@@ -647,23 +573,14 @@ Outputs:
     Description: Aurora MySQL port (usually 3306).
     Value: !GetAtt DBClusterAuroraBookstore.Endpoint.Port
 
-  DocumentDBClusterEndpoint:
-    Description: DocumentDB cluster endpoint hostname — use in MONGO_URI for book-query and book-data-sync (TLS typically required).
-    Value: !GetAtt DocumentDBCluster.Endpoint
-
-  DocumentDBReaderEndpoint:
-    Description: DocumentDB reader endpoint (optional read preference in client URI). CloudFormation attribute name is ReadEndpoint (not ReaderEndpoint).
-    Value: !GetAtt DocumentDBCluster.ReadEndpoint
-
-  DocumentDBPort:
-    Description: DocumentDB port (usually 27017).
-    Value: !GetAtt DocumentDBCluster.Port
-
-  DocumentDBMongoUriHint:
+  MongoAtlasDatabaseName:
     Description: >-
-      Build MONGO_URI as mongodb://<DBUsername>:<DBPassword>@<endpoint>:<port>/?tls=true&tlsCAFile=rds-combined-ca-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false
-      (download CA from AWS; never commit passwords). Use DocumentDBClusterEndpoint and DocumentDBPort outputs above.
-    Value: !Sub
-      - "mongodb://USER:PASSWORD@${Host}:${Port}/?tls=true&retryWrites=false"
-      - Host: !GetAtt DocumentDBCluster.Endpoint
-        Port: !GetAtt DocumentDBCluster.Port
+      Atlas database name — set MONGO_DB_NAME in k8s deploy.env (same value). Build MONGO_URI in Atlas UI (Connect → Drivers):
+      mongodb+srv://<user>:<password>@<cluster host>/<this database>?appName=...
+    Value: !Ref MongoDatabaseName
+
+  MongoAtlasCollectionName:
+    Description: >-
+      Atlas collection for book docs — set MONGO_COLLECTION in k8s deploy.env. Create a text index on this collection
+      for GET /books?keyword= (see scripts/atlas_text_index.mongosh.js). Allow Atlas Network Access for your EKS nodes’ egress IPs.
+    Value: !Ref MongoCollectionName

@@ -32,6 +32,8 @@ set +a
 : "${SMTP_PASSWORD:?SMTP_PASSWORD is required}"
 : "${SMTP_SENDER_EMAIL:?SMTP_SENDER_EMAIL is required}"
 : "${MONGO_URI:?MONGO_URI is required}"
+: "${MONGO_DB_NAME:?MONGO_DB_NAME is required (Atlas database name, e.g. books)}"
+: "${MONGO_COLLECTION:?MONGO_COLLECTION is required (e.g. books_asheriff)}"
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
@@ -53,6 +55,8 @@ for f in "$ROOT_DIR"/k8s/*.yaml; do
     -e "s|YOUR_REGISTRY/crm-service:latest|${IMAGE_REGISTRY}/crm-service:${IMAGE_TAG}|g" \
     -e "s|YOUR_RDS_ENDPOINT|${RDS_ENDPOINT}|g" \
     -e "s|YOUR_MONGO_URI|${MONGO_URI}|g" \
+    -e "s|YOUR_MONGO_DB_NAME|${MONGO_DB_NAME}|g" \
+    -e "s|YOUR_MONGO_COLLECTION|${MONGO_COLLECTION}|g" \
     -e "s|YOUR_DB_USER|${DB_USER}|g" \
     -e "s|YOUR_DB_PASSWORD|${DB_PASSWORD}|g" \
     -e "s|YOUR_KAFKA_BROKERS|${KAFKA_BROKERS}|g" \
