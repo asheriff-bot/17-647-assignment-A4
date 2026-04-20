@@ -6,7 +6,7 @@ import os
 from urllib.parse import unquote
 
 import requests
-from flask import Flask, Response, request
+from flask import Flask, Response, jsonify, request
 
 import sys
 
@@ -37,19 +37,15 @@ CUSTOMER_ATTRS_TO_REMOVE = {"address", "address2", "city", "state", "zipcode"}
 
 
 def _backend_base_for(path: str, method: str) -> str:
-    m = (method or "GET").upper()
+    if path.startswith("/cmd/"):
+        return (BOOK_CMD_BASE or BACKEND_BASE).rstrip("/")
     if path.startswith("/books"):
-        if m in ("POST", "PUT"):
-            return (BOOK_CMD_BASE or BACKEND_BASE).rstrip("/")
         return (BOOK_QUERY_BASE or BACKEND_BASE).rstrip("/")
     return BACKEND_BASE
 
 
 def proxy_to_backend(path: str, method: str = "GET", **kwargs):
     base = _backend_base_for(path, method)
-    m = (method or "GET").upper()
-    if path.startswith("/books") and m in ("POST", "PUT"):
-        path = "/cmd" + path
     url = f"{base}{path}"
     if request.query_string:
         url += "?" + request.query_string.decode()
@@ -175,17 +171,35 @@ def customer_by_id(subpath):
     )
 
 
+@app.route("/cmd/books", methods=["POST"])
+@require_mobile_bff
+def cmd_books_post():
+    body, status_code, headers = proxy_to_backend("/cmd/books", method="POST")
+    return build_response(body, status_code, headers, apply_book=True, apply_customer=False)
+
+
+@app.route("/cmd/books/<path:subpath>", methods=["PUT"])
+@require_mobile_bff
+def cmd_books_put(subpath):
+    body, status_code, headers = proxy_to_backend(f"/cmd/books/{subpath}", method="PUT")
+    return build_response(body, status_code, headers, apply_book=True, apply_customer=False)
+
+
 @app.route("/books", methods=["GET", "POST"])
 @require_mobile_bff
 def books():
-    body, status_code, headers = proxy_to_backend("/books", method=request.method)
+    if request.method == "POST":
+        return jsonify({}), 405
+    body, status_code, headers = proxy_to_backend("/books", method="GET")
     return build_response(body, status_code, headers, apply_book=True, apply_customer=False)
 
 
 @app.route("/books/<path:subpath>", methods=["GET", "PUT"])
 @require_mobile_bff
 def book_subpath(subpath):
-    body, status_code, headers = proxy_to_backend(f"/books/{subpath}", method=request.method)
+    if request.method == "PUT":
+        return jsonify({}), 405
+    body, status_code, headers = proxy_to_backend(f"/books/{subpath}", method="GET")
     return build_response(body, status_code, headers, apply_book=True, apply_customer=False)
 
 
