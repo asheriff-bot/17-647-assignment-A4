@@ -1,6 +1,6 @@
-# Assignment A3: Bookstore microservices on EKS
+# Assignment A4: Bookstore microservices on EKS
 
-Five Python microservices (three backends, two BFFs), a shared library, and Kubernetes manifests for deployment on AWS EKS. Optional infrastructure is defined in `CF-A3-cmu.yml`.
+Five Python microservices (three backends, two BFFs), a shared library, and Kubernetes manifests for deployment on AWS EKS. Optional infrastructure is defined in `CF-A4-cmu.yml`.
 
 ## Repository layout
 
@@ -14,13 +14,13 @@ Five Python microservices (three backends, two BFFs), a shared library, and Kube
 | `k8s/rendered/` | Generated manifests (gitignored); produced by the render script |
 | `scripts/` | Render script, Docker push helper, SQL init/truncate helpers, nginx config for local compose |
 | `docker-compose.yml` | Optional local stack (MySQL, Kafka, all services, mock recommendation API) |
-| `DEPLOY_A3_EKS.md` | EKS deploy: env, build/push images, apply manifests, verify |
-| `CF-A3-cmu.yml` | Optional course CloudFormation for VPC/EKS/Aurora/Kafka/MSK |
+| `DEPLOY_4_EKS.md` | EKS deploy: env, build/push images, apply manifests, verify |
+| `CF-A4-cmu.yml` | Optional course CloudFormation for VPC/EKS/Aurora/Kafka/MSK |
 | `url.txt` | Four lines: web BFF base URL, mobile BFF base URL, Andrew ID, CRM sender email (`SMTP_SENDER_EMAIL`) |
 
 Keep manifests under `k8s/` only (no duplicate `rendered/` at repo root).
 
-## Architecture (A3)
+## Architecture (A4)
 
 - **Web** and **mobile** BFFs expose HTTP (in EKS, typically via `LoadBalancer` Services). They validate **JWT** then **`X-Client-Type`** (`shared/bff_auth.py`).
 - **Backend traffic** from BFFs goes to **`backend-router`** (nginx in the cluster), which routes `/customers*` and `/books*` to the customer and book services on port 3000. Set `URL_BASE_BACKEND_SERVICES` to `http://backend-router:3000` in the cluster.
@@ -72,7 +72,7 @@ docker build -f web_bff/Dockerfile -t <registry>/web-bff .
 docker build -f mobile_bff/Dockerfile -t <registry>/mobile-bff .
 ```
 
-Push to your registry and set image names in `k8s/deploy.env` before rendering (see `DEPLOY_A3_EKS.md`).
+Push to your registry and set image names in `k8s/deploy.env` before rendering (see `DEPLOY_A4_EKS.md`).
 
 ## Local run (Docker Compose)
 
@@ -87,7 +87,7 @@ Details and env tuning are in `docker-compose.yml` comments.
 
 ## Deploy on EKS
 
-Follow **`DEPLOY_A3_EKS.md`**: fill `k8s/deploy.env` from `k8s/deploy.env.example`, run `./scripts/render_k8s_from_env.sh`, `kubectl apply` the rendered manifests (or apply templates if you substitute values another way).
+Follow **`DEPLOY_A4_EKS.md`**: fill `k8s/deploy.env` from `k8s/deploy.env.example`, run `./scripts/render_k8s_from_env.sh`, `kubectl apply` the rendered manifests (or apply templates if you substitute values another way).
 
 ## API summary
 
@@ -112,8 +112,8 @@ assign_3_aws/
 │   └── rendered/          # generated; gitignored
 ├── scripts/
 ├── docker-compose.yml
-├── CF-A3-cmu.yml
-├── DEPLOY_A3_EKS.md
+├── CF-A4-cmu.yml
+├── DEPLOY_A4_EKS.md
 ├── deploy.md                # legacy A2 EC2-oriented notes
 ├── url.txt
 └── README.md
