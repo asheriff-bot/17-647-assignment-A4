@@ -360,21 +360,46 @@ def list_or_search_books():
             except OperationFailure:
                 docs = []
         if not docs:
-            rx = re.compile(re.escape(kw), re.IGNORECASE)
-            flt = {
-                "$or": [
-                    {"title": rx},
-                    {"author": rx},
-                    {"Author": rx},
-                    {"description": rx},
-                    {"genre": rx},
-                    {"summary": rx},
-                ]
-            }
+            # Regex on non-string fields (e.g. genre as int) errors in MongoDB; use $regexMatch + $toString.
+            pattern = re.escape(kw)
+            expr_or = [
+                {"$regexMatch": {"input": {"$ifNull": ["$title", ""]}, "regex": pattern, "options": "i"}},
+                {
+                    "$regexMatch": {
+                        "input": {"$ifNull": ["$description", ""]},
+                        "regex": pattern,
+                        "options": "i",
+                    }
+                },
+                {"$regexMatch": {"input": {"$ifNull": ["$summary", ""]}, "regex": pattern, "options": "i"}},
+                {"$regexMatch": {"input": {"$ifNull": ["$Author", ""]}, "regex": pattern, "options": "i"}},
+                {"$regexMatch": {"input": {"$ifNull": ["$author", ""]}, "regex": pattern, "options": "i"}},
+                {
+                    "$regexMatch": {
+                        "input": {"$toString": {"$ifNull": ["$genre", ""]}},
+                        "regex": pattern,
+                        "options": "i",
+                    }
+                },
+            ]
             try:
-                docs = list(coll.find(flt))
-            except Exception as e:
-                return jsonify({"error": str(e)}), 500
+                docs = list(coll.aggregate([{"$match": {"$expr": {"$or": expr_or}}}]))
+            except Exception:
+                rx = re.compile(re.escape(kw), re.IGNORECASE)
+
+                def _doc_matches(doc: dict) -> bool:
+                    for key in ("title", "description", "summary", "Author", "author", "genre"):
+                        v = doc.get(key)
+                        if v is None:
+                            continue
+                        if rx.search(str(v)):
+                            return True
+                    return False
+
+                try:
+                    docs = [d for d in coll.find({}) if _doc_matches(d)]
+                except Exception as e:
+                    return jsonify({"error": str(e)}), 500
         rows = [mongo_doc_to_row(d) for d in docs]
         out = [row_to_book_json(r, True) for r in rows]
         if not out:
