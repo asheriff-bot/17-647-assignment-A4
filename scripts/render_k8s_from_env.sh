@@ -35,6 +35,14 @@ set +a
 : "${MONGO_DB_NAME:?MONGO_DB_NAME is required (Atlas database name, e.g. books)}"
 : "${MONGO_COLLECTION:?MONGO_COLLECTION is required (e.g. books_asheriff)}"
 
+# GNU sed replacement treats & as "matched text". Atlas URIs use & in ?a=1&b=2 — must escape.
+_sed_repl_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g'
+}
+MONGO_URI_ESC=$(_sed_repl_escape "$MONGO_URI")
+DB_PASSWORD_ESC=$(_sed_repl_escape "$DB_PASSWORD")
+SMTP_PASSWORD_ESC=$(_sed_repl_escape "$SMTP_PASSWORD")
+
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
@@ -54,11 +62,11 @@ for f in "$ROOT_DIR"/k8s/*.yaml; do
     -e "s|YOUR_REGISTRY/book-data-sync:latest|${IMAGE_REGISTRY}/book-data-sync:${IMAGE_TAG}|g" \
     -e "s|YOUR_REGISTRY/crm-service:latest|${IMAGE_REGISTRY}/crm-service:${IMAGE_TAG}|g" \
     -e "s|YOUR_RDS_ENDPOINT|${RDS_ENDPOINT}|g" \
-    -e "s|YOUR_MONGO_URI|${MONGO_URI}|g" \
+    -e "s|YOUR_MONGO_URI|${MONGO_URI_ESC}|g" \
     -e "s|YOUR_MONGO_DB_NAME|${MONGO_DB_NAME}|g" \
     -e "s|YOUR_MONGO_COLLECTION|${MONGO_COLLECTION}|g" \
     -e "s|YOUR_DB_USER|${DB_USER}|g" \
-    -e "s|YOUR_DB_PASSWORD|${DB_PASSWORD}|g" \
+    -e "s|YOUR_DB_PASSWORD|${DB_PASSWORD_ESC}|g" \
     -e "s|YOUR_KAFKA_BROKERS|${KAFKA_BROKERS}|g" \
     -e "s|YOUR_RECOMMENDATION_SERVICE_URL|${RECOMMENDATION_SERVICE_URL}|g" \
     -e "s|/recommended-titles/isbn/{isbn}|${RECOMMENDATION_PATH_TEMPLATE}|g" \
@@ -68,7 +76,7 @@ for f in "$ROOT_DIR"/k8s/*.yaml; do
     -e "s|YOUR_SMTP_PORT|${SMTP_PORT}|g" \
     -e "s|YOUR_SMTP_STARTTLS|${SMTP_STARTTLS}|g" \
     -e "s|YOUR_SMTP_USERNAME|${SMTP_USERNAME}|g" \
-    -e "s|YOUR_SMTP_PASSWORD|${SMTP_PASSWORD}|g" \
+    -e "s|YOUR_SMTP_PASSWORD|${SMTP_PASSWORD_ESC}|g" \
     -e "s|YOUR_SMTP_SENDER_EMAIL|${SMTP_SENDER_EMAIL}|g" \
     "$f" > "$OUT_DIR/$bn"
 done
