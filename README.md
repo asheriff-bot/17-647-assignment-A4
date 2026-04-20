@@ -102,7 +102,7 @@ Follow **`DEPLOY_A4_EKS.md`**: fill `k8s/deploy.env` from `k8s/deploy.env.exampl
 ## Project layout
 
 ```
-assign_3_aws/
+assign_4_aws/
 ├── book_service/
 ├── customer_service/
 ├── crm_service/
