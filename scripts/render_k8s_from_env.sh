@@ -46,9 +46,9 @@ if [[ "$BOOK_DB_USER" == "$CUSTOMER_DB_USER" ]]; then
   exit 1
 fi
 
-# GNU sed replacement treats & as "matched text". Atlas URIs use & in ?a=1&b=2 — must escape.
+# GNU sed replacement: & → matched text; | is our delimiter — escape both + backslashes.
 _sed_repl_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g'
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g; s/|/\\|/g'
 }
 MONGO_URI_ESC=$(_sed_repl_escape "$MONGO_URI")
 BOOK_DB_PASSWORD_ESC=$(_sed_repl_escape "$BOOK_DB_PASSWORD")
