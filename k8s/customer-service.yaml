@@ -32,9 +32,9 @@ spec:
             - name: DB_HOST
               value: YOUR_RDS_ENDPOINT
             - name: DB_USER
-              value: YOUR_DB_USER
+              value: YOUR_CUSTOMER_DB_USER
             - name: DB_PASSWORD
-              value: YOUR_DB_PASSWORD
+              value: YOUR_CUSTOMER_DB_PASSWORD
             - name: DB_NAME
               value: customers_db
             - name: KAFKA_BROKERS

@@ -22,9 +22,9 @@ spec:
                 - name: DB_HOST
                   value: YOUR_RDS_ENDPOINT
                 - name: DB_USER
-                  value: YOUR_DB_USER
+                  value: YOUR_BOOK_DB_USER
                 - name: DB_PASSWORD
-                  value: YOUR_DB_PASSWORD
+                  value: YOUR_BOOK_DB_PASSWORD
                 - name: DB_NAME
                   value: books_db
                 - name: MONGO_URI

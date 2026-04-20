@@ -18,7 +18,7 @@ set +a
 : "${IMAGE_REGISTRY:?IMAGE_REGISTRY is required}"
 : "${IMAGE_TAG:?IMAGE_TAG is required}"
 : "${RDS_ENDPOINT:?RDS_ENDPOINT is required}"
-: "${DB_USER:?DB_USER is required}"
+: "${DB_USER:?DB_USER is required (admin / mysql CLI; also default if BOOK_/CUSTOMER_ not set)}"
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
 : "${KAFKA_BROKERS:?KAFKA_BROKERS is required}"
 : "${ANDREW_ID:?ANDREW_ID is required}"
@@ -35,12 +35,24 @@ set +a
 : "${MONGO_DB_NAME:?MONGO_DB_NAME is required (Atlas database name, e.g. books)}"
 : "${MONGO_COLLECTION:?MONGO_COLLECTION is required (e.g. books_asheriff)}"
 
+# Per-microservice RDS users (books vs customers). Default to DB_USER only for migration; must resolve to two different usernames.
+BOOK_DB_USER="${BOOK_DB_USER:-$DB_USER}"
+BOOK_DB_PASSWORD="${BOOK_DB_PASSWORD:-$DB_PASSWORD}"
+CUSTOMER_DB_USER="${CUSTOMER_DB_USER:-$DB_USER}"
+CUSTOMER_DB_PASSWORD="${CUSTOMER_DB_PASSWORD:-$DB_PASSWORD}"
+if [[ "$BOOK_DB_USER" == "$CUSTOMER_DB_USER" ]]; then
+  echo "render_k8s_from_env: error: BOOK_DB_USER and CUSTOMER_DB_USER must be different MySQL accounts." >&2
+  echo "Set BOOK_DB_USER / CUSTOMER_DB_USER (and passwords) in k8s/deploy.env — see k8s/deploy.env.example and scripts/grant_microservice_mysql_users.sql" >&2
+  exit 1
+fi
+
 # GNU sed replacement treats & as "matched text". Atlas URIs use & in ?a=1&b=2 — must escape.
 _sed_repl_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/&/\\&/g'
 }
 MONGO_URI_ESC=$(_sed_repl_escape "$MONGO_URI")
-DB_PASSWORD_ESC=$(_sed_repl_escape "$DB_PASSWORD")
+BOOK_DB_PASSWORD_ESC=$(_sed_repl_escape "$BOOK_DB_PASSWORD")
+CUSTOMER_DB_PASSWORD_ESC=$(_sed_repl_escape "$CUSTOMER_DB_PASSWORD")
 SMTP_PASSWORD_ESC=$(_sed_repl_escape "$SMTP_PASSWORD")
 
 rm -rf "$OUT_DIR"
@@ -65,8 +77,10 @@ for f in "$ROOT_DIR"/k8s/*.yaml; do
     -e "s|YOUR_MONGO_URI|${MONGO_URI_ESC}|g" \
     -e "s|YOUR_MONGO_DB_NAME|${MONGO_DB_NAME}|g" \
     -e "s|YOUR_MONGO_COLLECTION|${MONGO_COLLECTION}|g" \
-    -e "s|YOUR_DB_USER|${DB_USER}|g" \
-    -e "s|YOUR_DB_PASSWORD|${DB_PASSWORD_ESC}|g" \
+    -e "s|YOUR_BOOK_DB_USER|${BOOK_DB_USER}|g" \
+    -e "s|YOUR_BOOK_DB_PASSWORD|${BOOK_DB_PASSWORD_ESC}|g" \
+    -e "s|YOUR_CUSTOMER_DB_USER|${CUSTOMER_DB_USER}|g" \
+    -e "s|YOUR_CUSTOMER_DB_PASSWORD|${CUSTOMER_DB_PASSWORD_ESC}|g" \
     -e "s|YOUR_KAFKA_BROKERS|${KAFKA_BROKERS}|g" \
     -e "s|YOUR_RECOMMENDATION_SERVICE_URL|${RECOMMENDATION_SERVICE_URL}|g" \
     -e "s|/recommended-titles/isbn/{isbn}|${RECOMMENDATION_PATH_TEMPLATE}|g" \
