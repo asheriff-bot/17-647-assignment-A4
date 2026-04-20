@@ -22,6 +22,9 @@ Keep manifests under `k8s/` only (no duplicate `rendered/` at repo root).
 
 ## Architecture (A4)
 
+<img width="3048" height="3456" alt="diagram (9)" src="https://github.com/user-attachments/assets/44373a70-6000-45bd-b13d-5c85134216e0" />
+
+
 - **Web** and **mobile** BFFs expose HTTP (in EKS, typically via `LoadBalancer` Services). They validate **JWT** then **`X-Client-Type`** (`shared/bff_auth.py`).
 - **Backend traffic** from BFFs goes to **`backend-router`** (nginx in the cluster), which routes `/customers*` and `/books*` to the customer and book services on port 3000. Set `URL_BASE_BACKEND_SERVICES` to `http://backend-router:3000` in the cluster.
 - **Customer service** publishes customer events to **Kafka**; **CRM service** consumes them and sends email (SMTP env vars in manifests / `deploy.env`).
